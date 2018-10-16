@@ -1,6 +1,6 @@
 <?php
 
-namespace common\behaviors;
+namespace app\components;
 
 /**
 *  Пробую написать свое первое нормальное поведение для yii2
@@ -8,6 +8,17 @@ namespace common\behaviors;
 *  @author Artem w1575 Agryzkov
 *
 */
+
+
+ //  Пример Вызова
+ // 'helpersMany' => [
+ //     'class'               => app\components\HasManyBehavior::className(),
+ //     'junctionModel'       => SiteHelper::className(),
+ //     'relatedTable'        => User::className(),
+ //     'attribute'           => 'helpers',
+ //     'thisKey'             => 'site',
+ //     'relatedKey'          => 'user',
+ // ],
 
 use yii\base\Behavior;
 use yii\db\ActiveRecord;
@@ -20,14 +31,6 @@ class ManyToManyBehavior extends Behavior {
    *
    * @var [type]
    */
-  public $thisPK = 'id';
-
-  /**
-   * Первичный ключ связанной таблицы
-   *
-   * @var [type]
-   */
-  public $relatedPK = 'id';
 
   /**
    *
@@ -35,10 +38,18 @@ class ManyToManyBehavior extends Behavior {
    *
    * @var [type]
    */
-  public $junctionTable;
+  public $junctionModel;
 
+  /**
+   *
+   * @var [type]
+   */
   public $thisKey;
 
+  /**
+   *
+   * @var [type]
+   */
   public $relatedKey;
 
   /**
@@ -80,8 +91,12 @@ class ManyToManyBehavior extends Behavior {
      ActiveRecord::EVENT_BEFORE_INSERT => 'beforeInsert',
      ActiveRecord::EVENT_AFTER_UPDATE => 'afterUpdate',
      ActiveRecord::EVENT_AFTER_INSERT => 'afterInsert',
+
+     // если вдруг в базе данных у нас не указаны ограничения
+     // для внешних ключей то методы ниже будут делать грязную работу
      ActiveRecord::EVENT_BEFORE_DELETE => 'beforeDelete',
      ActiveRecord::EVENT_AFTER_DELETE => 'afterDelete',
+
     ];
   }
 
@@ -93,7 +108,10 @@ class ManyToManyBehavior extends Behavior {
    */
   public function beforeInsert()
   {
-    $this->insertThis = $this->owner->{"_$this->attribute"};
+    $this->insertThis = ($this->owner->{"_$this->attribute"} != 0 )
+                        ? $this->owner->{"_$this->attribute"}
+                        : []
+    ;
     return false;
   }
 
@@ -109,7 +127,7 @@ class ManyToManyBehavior extends Behavior {
       foreach($this->owner->{"_$this->attribute"} as $newKey => $newOne) {
         $isHere = false;
         foreach($this->owner->{$this->attribute} as $oldKey => $oldOne) {
-          if($oldOne->{$this->relatedPK} == $newOne) {
+          if($oldOne->primaryKey == $newOne) {
             $isHere = true;
             unset($this->deleteThis[$oldKey]);
             break;
@@ -159,11 +177,14 @@ class ManyToManyBehavior extends Behavior {
      return true;
    }
 
-
+   /**
+    * Удаляем ненужные значения
+    * @return [type] [description]
+    */
    private function deleteValues()
    {
      foreach($this->deleteThis as $one) {
-       $findThis = $this->junctionTable::find()->where([
+       $findThis = $this->junctionModel::find()->where([
          $this->thisKey => $this->owner->primaryKey,
          $this->relatedKey => $one,
        ])->one();
@@ -173,13 +194,17 @@ class ManyToManyBehavior extends Behavior {
      return true;
    }
 
+   /**
+    * Вставляем новые значения
+    * @return [type] [description]
+    */
    private function insertValues()
    {
      foreach($this->insertThis as $one ) {
-      $newOne = new $this->junctionTable;
+      $newOne = new $this->junctionModel;
       $newOne->{$this->thisKey} = $this->owner->primaryKey;
       $newOne->{$this->relatedKey} = $one;
-      $newOne->key = $this->owner->primaryKey . $one;
+      // $newOne->key = $this->owner->primaryKey . $one;
       $newOne->save();
      }
      return true;
